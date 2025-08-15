@@ -23,14 +23,14 @@ public class TaskController {
         User user = userRepository.findByUsername(userDetails.getUsername())
                 .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
 
-        // Define o usuário associado à tarefa
         task.setUser(user);
 
-        // ALTERAÇÃO: Incrementa o contador de tarefas criadas do usuário
-        user.setTotalTasksCreated(user.getTotalTasksCreated() + 1);
-        userRepository.save(user); // Salva o usuário com o novo total
+        // CORREÇÃO: Adicionado um Null check para evitar o NullPointerException
+        // com usuários que não tinham o campo 'totalTasksCreated' inicializado.
+        long currentTotal = user.getTotalTasksCreated() != null ? user.getTotalTasksCreated() : 0L;
+        user.setTotalTasksCreated(currentTotal + 1);
+        userRepository.save(user);
 
-        // Salva e retorna a nova tarefa
         return taskRepository.save(task);
     }
 
