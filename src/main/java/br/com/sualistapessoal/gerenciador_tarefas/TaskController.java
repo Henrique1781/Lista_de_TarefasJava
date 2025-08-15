@@ -20,8 +20,17 @@ public class TaskController {
 
     @PostMapping
     public Task createTask(@RequestBody Task task, @AuthenticationPrincipal UserDetails userDetails) {
-        User user = userRepository.findByUsername(userDetails.getUsername()).orElseThrow();
+        User user = userRepository.findByUsername(userDetails.getUsername())
+                .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
+
+        // Define o usuário associado à tarefa
         task.setUser(user);
+
+        // ALTERAÇÃO: Incrementa o contador de tarefas criadas do usuário
+        user.setTotalTasksCreated(user.getTotalTasksCreated() + 1);
+        userRepository.save(user); // Salva o usuário com o novo total
+
+        // Salva e retorna a nova tarefa
         return taskRepository.save(task);
     }
 
@@ -31,7 +40,6 @@ public class TaskController {
         return taskRepository.findByUserId(user.getId());
     }
 
-    // NOVO: READ - Buscar uma única tarefa pelo seu ID
     @GetMapping("/{id}")
     public ResponseEntity<Task> getTaskById(@PathVariable Long id) {
         return taskRepository.findById(id)
@@ -39,7 +47,6 @@ public class TaskController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // UPDATE - Atualizado para incluir os novos campos
     @PutMapping("/{id}")
     public ResponseEntity<Task> updateTask(@PathVariable Long id, @RequestBody Task taskDetails) {
         return taskRepository.findById(id).map(task -> {
@@ -50,23 +57,21 @@ public class TaskController {
             task.setCategory(taskDetails.getCategory());
             task.setPriority(taskDetails.getPriority());
             task.setCompleted(taskDetails.isCompleted());
-            // SETANDO OS NOVOS CAMPOS
             task.setWithNotification(taskDetails.isWithNotification());
             task.setRecurring(taskDetails.isRecurring());
-            task.setNotificationState(taskDetails.getNotificationState()); // LINHA ADICIONADA
+            task.setNotificationState(taskDetails.getNotificationState());
 
             Task updatedTask = taskRepository.save(task);
             return ResponseEntity.ok(updatedTask);
         }).orElse(ResponseEntity.notFound().build());
     }
 
-    // DELETE - Excluir uma tarefa
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTask(@PathVariable Long id) {
         if (!taskRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
         }
         taskRepository.deleteById(id);
-        return ResponseEntity.noContent().build(); // Resposta padrão para exclusão bem-sucedida
+        return ResponseEntity.noContent().build();
     }
 }

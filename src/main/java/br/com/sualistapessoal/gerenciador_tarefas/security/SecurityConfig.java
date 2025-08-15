@@ -40,7 +40,8 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-                        .requestMatchers("/", "/index.html", "/style.css", "/script.js", "/manifest.json", "/sw.js").permitAll()
+                        // ALTERAÇÃO: Adicionado "/favicon.ico" para corrigir o erro 403 no console
+                        .requestMatchers("/", "/index.html", "/style.css", "/script.js", "/manifest.json", "/sw.js", "/favicon.ico").permitAll()
                         .requestMatchers("/icons/**", "/sounds/**").permitAll()
                         .requestMatchers("/api/user/login", "/api/user/register").permitAll()
                         .anyRequest().authenticated()

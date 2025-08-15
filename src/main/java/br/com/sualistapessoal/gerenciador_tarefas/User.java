@@ -23,10 +23,12 @@ public class User {
     @Column
     private Integer age;
 
-    // --- CORREÇÃO APLICADA AQUI ---
-    // A anotação @Lob foi REMOVIDA. A anotação @Column é suficiente.
-    @Column(columnDefinition = "TEXT") // Define o tipo da coluna como TEXT para strings longas
+    @Column(columnDefinition = "TEXT")
     private String photo;
+
+    // NOVO CAMPO: Armazena o total de tarefas que o usuário já criou.
+    @Column
+    private Long totalTasksCreated = 0L;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Task> tasks;
@@ -46,4 +48,8 @@ public class User {
     public void setPhoto(String photo) { this.photo = photo; }
     public List<Task> getTasks() { return tasks; }
     public void setTasks(List<Task> tasks) { this.tasks = tasks; }
+
+    // GETTER E SETTER PARA O NOVO CAMPO
+    public Long getTotalTasksCreated() { return totalTasksCreated; }
+    public void setTotalTasksCreated(Long totalTasksCreated) { this.totalTasksCreated = totalTasksCreated; }
 }
