@@ -22,7 +22,7 @@ self.addEventListener('install', event => {
   );
 });
 
-// Evento de Fetch: Intercepta as requisições
+// Evento de Fetch: Intercepta as requisições para funcionar offline
 self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request)
@@ -35,5 +35,30 @@ self.addEventListener('fetch', event => {
         return fetch(event.request);
       }
     )
+  );
+});
+
+// --- NOVO CÓDIGO ADICIONADO ---
+// Evento de Clique na Notificação
+self.addEventListener('notificationclick', event => {
+  // Fecha a notificação
+  event.notification.close();
+
+  // Abre a janela do aplicativo ou foca nela se já estiver aberta
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
+      // Se uma janela do app já estiver aberta, foque nela
+      if (clientList.length > 0) {
+        let client = clientList[0];
+        for (let i = 0; i < clientList.length; i++) {
+          if (clientList[i].focused) {
+            client = clientList[i];
+          }
+        }
+        return client.focus();
+      }
+      // Se não houver uma janela aberta, abra uma nova
+      return clients.openWindow('/');
+    })
   );
 });
