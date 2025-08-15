@@ -83,7 +83,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentCategoryFilter = 'all';
     let isMuted = false;
     let authToken = localStorage.getItem('authToken');
-    const API_BASE_URL = ''; 
+    const API_BASE_URL = '';
     let resolveConfirm;
 
     const categoryEmojis = {
@@ -283,6 +283,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const tasks = await apiRequest('/api/tasks');
             if (tasks) {
                 allTasks = tasks;
+                localStorage.setItem('totalTasks', tasks.length); // Atualiza o total de tarefas
                 renderTasks();
             }
         } catch (error) {
@@ -390,12 +391,21 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
-        // ... (validação de data/hora)
+        const dateValue = document.getElementById('date').value;
+        const today = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+        if (dateValue === today && timeValue) {
+            const now = new Date();
+            const currentTime = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+            if (timeValue < currentTime) {
+                showToast("Não é possível agendar uma tarefa para um horário que já passou hoje.", true);
+                return;
+            }
+        }
 
         const taskData = {
             title: document.getElementById('title').value,
             description: document.getElementById('description').value,
-            date: document.getElementById('date').value,
+            date: dateValue,
             time: timeValue ? `${timeValue}:00` : null,
             category: document.getElementById('category').value,
             priority: document.getElementById('priority').value,
@@ -476,6 +486,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function showLoggedOutState() {
+        mainContainer.classList.remove('hidden'); // Mostra o conteúdo mesmo deslogado
         fab.classList.add('hidden');
         logoutBtn.classList.add('hidden');
         loginModal.classList.remove('hidden');
@@ -488,7 +499,7 @@ document.addEventListener('DOMContentLoaded', () => {
         authToken = null;
         localStorage.clear();
         allTasks = [];
-        renderTasks();
+        renderTasks(); // Limpa a lista de tarefas da tela
         showLoggedOutState();
     }
 
@@ -520,7 +531,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     registerForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-        // ... (código de registro sem alterações) ...
         const name = document.getElementById('register-name').value;
         const age = document.getElementById('register-age').value;
         const username = document.getElementById('register-username').value;
@@ -605,9 +615,17 @@ document.addEventListener('DOMContentLoaded', () => {
         const updateData = { name, age };
 
         const saveAndUpdate = async (photoData) => {
+            // Inclui a foto apenas se ela for nova (não nula)
             if (photoData) {
                 updateData.photo = photoData;
+            } else {
+                // Se não houver foto nova, envia a existente para não apagar
+                const existingPhoto = localStorage.getItem('userPhoto');
+                if (existingPhoto && existingPhoto !== 'null') {
+                    updateData.photo = existingPhoto;
+                }
             }
+            
             try {
                 await apiRequest('/api/user/profile', 'PUT', updateData, true); // showLoader = true
                 localStorage.setItem('userName', name);
@@ -703,16 +721,154 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function showNotification(title, body) {
         if (!('Notification' in window) || Notification.permission !== 'granted') return;
-        new Notification(title, { body: body, icon: '/icons/icon-192x192.png' });
+        
+        const options = {
+            body: body,
+            icon: '/icons/icon-192x192.png',
+            badge: '/icons/icon-192x192.png' // Ícone para a barra de status no Android
+        };
+
+        if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
+            navigator.serviceWorker.ready.then(function(registration) {
+                registration.showNotification(title, options);
+            });
+        } else {
+             new Notification(title, options);
+        }
     }
     
-    // ... (restante do código de notificações, countdowns, etc. sem alterações)...
+    function checkAndUpdateCountdown() {
+        const now = new Date();
+        allTasks.forEach(task => {
+            if (task.completed || !task.withNotification || !task.date || !task.time) return;
+
+            const taskDateTime = new Date(`${task.date}T${task.time}`);
+            const diffMillis = taskDateTime - now;
+
+            const countdownElement = document.querySelector(`.task-card[data-id='${task.id}'] .notification-countdown span`);
+            if(countdownElement) {
+                countdownElement.parentElement.classList.remove('hidden');
+                if(diffMillis > 0) {
+                   const minutes = Math.ceil(diffMillis / (1000 * 60));
+                   if (minutes > 1440) {
+                        countdownElement.textContent = `em ${Math.floor(minutes / 1440)}d`;
+                   } else if (minutes > 60) {
+                        countdownElement.textContent = `em ${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+                   } else {
+                        countdownElement.textContent = `em ${minutes}m`;
+                   }
+                } else {
+                    countdownElement.parentElement.classList.add('hidden');
+                }
+            }
+        });
+    }
+
+    function checkTasksAndSendNotifications() {
+        const now = new Date();
+        allTasks.forEach(async task => {
+            if (task.completed || !task.withNotification || !task.date || !task.time) return;
+    
+            const taskDateTime = new Date(`${task.date}T${task.time}`);
+            const diffMillis = now - taskDateTime;
+            const fiveMinMillis = 5 * 60 * 1000;
+            const oneHourMillis = 60 * 60 * 1000;
+            let needsUpdate = false;
+    
+            if (diffMillis >= -fiveMinMillis && diffMillis < 0 && task.notificationState < 1) {
+                showNotification(`Lembrete: ${task.title}`, `Sua tarefa começa em 5 minutos.`);
+                task.notificationState = 1;
+                needsUpdate = true;
+            } else if (diffMillis >= 0 && diffMillis < fiveMinMillis && task.notificationState < 2) {
+                showNotification(`Lembrete: ${task.title}`, `Sua tarefa está agendada para agora. Não se esqueça!`);
+                task.notificationState = 2;
+                needsUpdate = true;
+            } else if (diffMillis >= fiveMinMillis && diffMillis < oneHourMillis && task.notificationState < 3) {
+                showNotification(`Tarefa Atrasada: ${task.title}`, `Já se passaram 5 minutos. Se já concluiu, marque a tarefa como feita.`);
+                task.notificationState = 3;
+                needsUpdate = true;
+            } else if (diffMillis >= oneHourMillis && task.notificationState < 4) {
+                showNotification(`Pendente: ${task.title}`, `Esta tarefa está pendente e atrasada há mais de uma hora.`);
+                task.notificationState = 4;
+                needsUpdate = true;
+            }
+
+            if (needsUpdate) {
+                try {
+                    await apiRequest(`/api/tasks/${task.id}`, 'PUT', task);
+                } catch (error) {
+                    console.error(`Falha ao salvar o estado da notificação para a tarefa ${task.id}`, error);
+                }
+            }
+        });
+    }
+
+    async function checkAndResetRecurringTasks() {
+        const currentDate = new Date().getDate();
+        if (currentDate !== lastCheckedDate) {
+            lastCheckedDate = currentDate;
+            const recurringTasksToReset = allTasks.filter(task => task.recurring && task.completed);
+            if (recurringTasksToReset.length > 0) {
+                const promises = recurringTasksToReset.map(task => {
+                    task.completed = false;
+                    task.notificationState = 0;
+                    const tomorrow = new Date();
+                    tomorrow.setDate(tomorrow.getDate() + 1);
+                    task.date = tomorrow.toISOString().split('T')[0];
+                    return apiRequest(`/api/tasks/${task.id}`, 'PUT', task);
+                });
+                await Promise.all(promises);
+                loadTasks();
+            }
+        }
+    }
+
+    function updateReactivationCountdown() {
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(now.getDate() + 1);
+        tomorrow.setHours(0, 0, 0, 0);
+    
+        const diffMillis = tomorrow - now;
+        const hours = Math.floor(diffMillis / (1000 * 60 * 60));
+        const minutes = Math.floor((diffMillis % (1000 * 60 * 60)) / (1000 * 60));
+    
+        document.querySelectorAll('.reactivation-countdown span').forEach(span => {
+            span.textContent = `Reativa em ${hours}h ${minutes}m`;
+        });
+    }
+
+    function checkAndUpdateOverdueStatus() {
+        const now = new Date();
+        const fiveMinutesInMillis = 5 * 60 * 1000;
+        allTasks.forEach(task => {
+            if (!task.date || !task.time) return;
+            const taskCard = document.querySelector(`.task-card[data-id='${task.id}']`);
+            if (!taskCard) return;
+
+            if(task.completed) {
+                taskCard.classList.remove('overdue');
+                return;
+            }
+
+            const taskDateTime = new Date(`${task.date}T${task.time}`);
+            if (now - taskDateTime > fiveMinutesInMillis) {
+                taskCard.classList.add('overdue');
+            } else {
+                taskCard.classList.remove('overdue');
+            }
+        });
+    }
 
     function scheduleTaskChecks() {
         if (taskCheckInterval) clearInterval(taskCheckInterval);
         
         function runPeriodicChecks() {
-            // ... (funções de verificação periódica) ...
+            checkAndUpdateCountdown();
+            checkAndUpdateOverdueStatus();
+            checkTasksAndSendNotifications();
+            checkAndResetRecurringTasks();
+            updateReactivationCountdown();
         }
 
         runPeriodicChecks();
@@ -721,17 +877,106 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- LÓGICA DE CLIMA E LOCALIZAÇÃO ---
     async function fetchLocationAndWeather() {
-        // ... (código de clima sem alterações) ...
+        try {
+            const geoResponse = await fetch('https://ipapi.co/json/');
+            if (!geoResponse.ok) throw new Error('Falha ao obter geolocalização.');
+            const geoData = await geoResponse.json();
+            if (geoData.error) throw new Error(geoData.reason);
+
+            const { city, country_name, latitude, longitude, timezone } = geoData;
+            locationEl.textContent = `${city}, ${country_name}`;
+            const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&current_weather=true`;
+            const weatherResponse = await fetch(weatherUrl);
+            if (!weatherResponse.ok) throw new Error('Falha ao obter dados do clima.');
+            const weatherData = await weatherResponse.json();
+
+            const temp = Math.round(weatherData.current_weather.temperature);
+            const weatherCode = weatherData.current_weather.weathercode;
+            temperatureEl.textContent = `${temp}°C`;
+            weatherIconEl.className = getWeatherIcon(weatherCode);
+            startClock(timezone);
+            locationWeatherSection.style.display = 'grid';
+        } catch (error) {
+            console.error("Erro ao carregar informações de localização e clima:", error);
+            locationEl.textContent = 'Não foi possível carregar.';
+            temperatureEl.textContent = '--';
+            startClock('America/Sao_Paulo');
+            locationWeatherSection.style.display = 'grid';
+        }
+    }
+    
+    function startClock(timezone) {
+        if (clockInterval) clearInterval(clockInterval);
+    
+        function updateClock() {
+            const now = new Date();
+            const timeOptions = {
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false,
+                timeZone: timezone,
+            };
+            const dateOptions = {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+                timeZone: timezone,
+            };
+    
+            let timeString = now.toLocaleTimeString('pt-BR', timeOptions);
+            if (timeString.length > 5) {
+                timeString = timeString.substring(0, 5);
+            }
+
+            currentTimeEl.textContent = timeString;
+            currentDateEl.textContent = new Intl.DateTimeFormat('pt-BR', dateOptions).format(now).replace(/(^|\s)\S/g, l => l.toUpperCase());
+
+        }
+    
+        updateClock();
+        clockInterval = setInterval(updateClock, 1000);
     }
 
+    function getWeatherIcon(weatherCode) {
+        const icons = {
+            0: 'ph-fill ph-sun', 1: 'ph-fill ph-cloud-sun', 2: 'ph-fill ph-cloud', 3: 'ph-fill ph-clouds',
+            45: 'ph-fill ph-fog', 48: 'ph-fill ph-fog', 51: 'ph-fill ph-cloud-rain', 53: 'ph-fill ph-cloud-rain',
+            55: 'ph-fill ph-cloud-rain', 61: 'ph-fill ph-cloud-rain', 63: 'ph-fill ph-cloud-rain', 65: 'ph-fill ph-cloud-heavy',
+            80: 'ph-fill ph-cloud-lightning', 81: 'ph-fill ph-cloud-lightning', 82: 'ph-fill ph-cloud-lightning',
+            95: 'ph-fill ph-cloud-lightning',
+        };
+        return icons[weatherCode] || 'ph-fill ph-question';
+    }
+
+
     window.addEventListener('click', (event) => {
-        if (event.target === taskModal) closeModal();
-        if (event.target === confirmModal) hideCustomConfirm(false);
-        if (event.target === userInfoModal) closeUserInfoModal();
+      if (event.target === taskModal) closeModal();
+      if (event.target === confirmModal) hideCustomConfirm(false);
+      if (event.target === userInfoModal) closeUserInfoModal();
     });
 
     // --- LÓGICA DE INSTALAÇÃO DO PWA ---
-    // ... (código PWA sem alterações) ...
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        if (authToken) { 
+            installAppBtn.classList.remove('hidden');
+        }
+    });
+
+    installAppBtn.addEventListener('click', async () => {
+        installAppBtn.classList.add('hidden');
+        deferredPrompt.prompt();
+        await deferredPrompt.userChoice;
+        deferredPrompt = null;
+    });
+
+    window.addEventListener('appinstalled', () => {
+        installAppBtn.classList.add('hidden');
+        deferredPrompt = null;
+        showToast("Aplicativo instalado com sucesso!");
+    });
+
 
     // --- INICIALIZAÇÃO ---
     async function initializeApp() {
@@ -744,7 +989,6 @@ document.addEventListener('DOMContentLoaded', () => {
         createCategoryFilters();
 
         try {
-            loader.classList.remove('hidden');
             await Promise.all([
                 loadTasks(),
                 fetchLocationAndWeather()
