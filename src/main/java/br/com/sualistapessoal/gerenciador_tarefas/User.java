@@ -24,15 +24,14 @@ public class User {
     private Integer age;
 
     // --- CORREÇÃO APLICADA AQUI ---
-    @Basic(fetch = FetchType.EAGER) // ADICIONE ESTA LINHA
-    @Lob // Anotação para campos grandes
+    // A anotação @Lob foi REMOVIDA. A anotação @Column é suficiente.
     @Column(columnDefinition = "TEXT") // Define o tipo da coluna como TEXT para strings longas
-    private String photo; // CAMPO PARA A FOTO
+    private String photo;
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Task> tasks;
 
-    // Getters e Setters (incluindo o da foto)
+    // Getters e Setters
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getName() { return name; }
@@ -43,8 +42,8 @@ public class User {
     public void setPassword(String password) { this.password = password; }
     public Integer getAge() { return age; }
     public void setAge(Integer age) { this.age = age; }
-    public String getPhoto() { return photo; } // GETTER DA FOTO
-    public void setPhoto(String photo) { this.photo = photo; } // SETTER DA FOTO
+    public String getPhoto() { return photo; }
+    public void setPhoto(String photo) { this.photo = photo; }
     public List<Task> getTasks() { return tasks; }
     public void setTasks(List<Task> tasks) { this.tasks = tasks; }
 }
