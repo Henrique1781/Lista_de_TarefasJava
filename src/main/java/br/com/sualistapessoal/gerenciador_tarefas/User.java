@@ -23,9 +23,11 @@ public class User {
     @Column
     private Integer age;
 
+    // --- CORREÇÃO APLICADA AQUI ---
+    @Basic(fetch = FetchType.EAGER) // ADICIONE ESTA LINHA
     @Lob // Anotação para campos grandes
     @Column(columnDefinition = "TEXT") // Define o tipo da coluna como TEXT para strings longas
-    private String photo; // NOVO CAMPO PARA A FOTO
+    private String photo; // CAMPO PARA A FOTO
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Task> tasks;
