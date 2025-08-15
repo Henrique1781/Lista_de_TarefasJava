@@ -21,11 +21,9 @@ import org.springframework.web.filter.CorsFilter;
 @EnableWebSecurity
 public class SecurityConfig {
 
-    // Injeção do nosso filtro JWT personalizado
     @Autowired
     private JwtTokenFilter jwtTokenFilter;
 
-    // Injeção do nosso serviço de detalhes do usuário
     @Autowired
     private UserDetailsServiceImpl userDetailsService;
 
@@ -46,15 +44,13 @@ public class SecurityConfig {
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(authorize -> authorize
-                        // Permite acesso a todos os arquivos estáticos e de mídia
                         .requestMatchers("/", "/index.html", "/style.css", "/script.js", "/manifest.json", "/sw.js").permitAll()
                         .requestMatchers("/icons/**", "/sounds/**").permitAll()
-                        // Permite acesso aos endpoints públicos de login e registro
                         .requestMatchers("/api/user/login", "/api/user/register").permitAll()
-                        // Todas as outras requisições precisam de autenticação
+                        // Adicionada permissão para os endpoints de notificação
+                        .requestMatchers("/api/notifications/subscribe", "/api/notifications/vapidPublicKey").permitAll()
                         .anyRequest().authenticated()
                 )
-                // LINHA CRÍTICA ADICIONADA: Adiciona o filtro JWT antes do filtro padrão de autenticação
                 .addFilterBefore(jwtTokenFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

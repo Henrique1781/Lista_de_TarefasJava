@@ -714,7 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (photoFile) {
             const reader = new FileReader();
             reader.onload = (e) => saveAndUpdate(e.target.result);
-            reader.readAsDataURL(photoFile);
+            reader.readAsDataURL(file);
         } else {
             saveAndUpdate(null);
         }
