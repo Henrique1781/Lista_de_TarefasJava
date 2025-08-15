@@ -24,6 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const hiddenTaskId = document.getElementById('task-id');
     const saveTaskBtn = document.getElementById('save-task-btn');
 
+    // Elementos de sugestão de horário
+    const timeInput = document.getElementById('time');
+    const timeSuggestions = document.getElementById('time-suggestions');
+
     const themeToggleBtn = document.getElementById('theme-toggle-btn');
     const themeIcon = themeToggleBtn.querySelector('i');
     const muteToggleBtn = document.getElementById('mute-toggle-btn');
@@ -92,7 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     let taskCheckInterval;
     let lastCheckedDate = new Date().getDate();
-    let autoRefreshInterval; // NOVO: Para atualização automática
+    let autoRefreshInterval;
 
     // --- ESTADO PWA ---
     let deferredPrompt;
@@ -119,49 +123,44 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 3. FUNÇÕES DA API ---
-    // Copie e cole esta função inteira, substituindo a antiga `apiRequest`
-async function apiRequest(endpoint, method = 'GET', body = null, showLoader = false) {
-    if (showLoader) loader.classList.remove('hidden');
-    
-    let url; // Mova a declaração da URL para fora do try
-    try {
-        url = `${API_BASE_URL}${endpoint}`;
-        const options = {
-            method,
-            headers: { 'Content-Type': 'application/json' }
-        };
-        if (authToken) {
-            options.headers['Authorization'] = `Bearer ${authToken}`;
-        }
-        if (body) options.body = JSON.stringify(body);
-        const response = await fetch(url, options);
-
-        if ((response.status === 401 || response.status === 403) && endpoint !== '/api/user/login') {
-            logout();
-            return;
-        }
-
-        // Se a resposta indicar um erro (ex: payload muito grande), capture a mensagem
-        if (!response.ok) {
-            // Tenta ler o corpo do erro, mas se não conseguir, usa o statusText
-            let errorBody;
-            try {
-                errorBody = await response.text();
-            } catch (e) {
-                errorBody = response.statusText;
+    async function apiRequest(endpoint, method = 'GET', body = null, showLoader = false) {
+        if (showLoader) loader.classList.remove('hidden');
+        
+        let url;
+        try {
+            url = `${API_BASE_URL}${endpoint}`;
+            const options = {
+                method,
+                headers: { 'Content-Type': 'application/json' }
+            };
+            if (authToken) {
+                options.headers['Authorization'] = `Bearer ${authToken}`;
             }
-            throw new Error(errorBody || `HTTP error! status: ${response.status}`);
+            if (body) options.body = JSON.stringify(body);
+            const response = await fetch(url, options);
+
+            if ((response.status === 401 || response.status === 403) && endpoint !== '/api/user/login') {
+                logout();
+                return;
+            }
+
+            if (!response.ok) {
+                let errorBody;
+                try {
+                    errorBody = await response.text();
+                } catch (e) {
+                    errorBody = response.statusText;
+                }
+                throw new Error(errorBody || `HTTP error! status: ${response.status}`);
+            }
+            return response.status === 204 ? null : await response.json();
+        } catch (error) {
+            console.error(`Error during API request to endpoint: ${endpoint}. URL: ${url}.`, error);
+            throw error;
+        } finally {
+            if (showLoader) loader.classList.add('hidden');
         }
-        return response.status === 204 ? null : await response.json();
-    } catch (error) {
-        // Log de erro mais detalhado
-        console.error(`Error during API request to endpoint: ${endpoint}. URL: ${url}.`, error);
-        // Joga o erro para a função que chamou, para que o showToast possa exibi-lo
-        throw error;
-    } finally {
-        if (showLoader) loader.classList.add('hidden');
     }
-}
 
     // --- 4. RENDERIZAÇÃO E LÓGICA (Tarefas) ---
     function updateStats() {
@@ -295,12 +294,11 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
             const tasks = await apiRequest('/api/tasks');
             if (tasks) {
                 allTasks = tasks;
-                localStorage.setItem('totalTasks', tasks.length); // Atualiza o total de tarefas
                 renderTasks();
             }
         } catch (error) {
             showToast("Não foi possível carregar as tarefas.", true);
-            if (autoRefreshInterval) clearInterval(autoRefreshInterval); // Para o refresh se der erro
+            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
         }
     }
 
@@ -322,7 +320,7 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
             try {
                 const isChecked = target.checked;
                 task.completed = isChecked;
-                await apiRequest(`/api/tasks/${id}`, 'PUT', task, true); // showLoader = true
+                await apiRequest(`/api/tasks/${id}`, 'PUT', task, true);
 
                 if (task.recurring && isChecked) {
                     showToast("Rotina concluída! Ela será reativada amanhã.");
@@ -334,7 +332,7 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
                 loadTasks();
             } catch (error) {
                 showToast("Erro ao atualizar a tarefa.", true);
-                loadTasks(); // Recarrega para reverter a mudança visual
+                loadTasks();
             }
         }
 
@@ -354,7 +352,7 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
             if (confirmed) {
                 try {
                     playSound(deleteSound, 0.4);
-                    await apiRequest(`/api/tasks/${id}`, 'DELETE', null, true); // showLoader = true
+                    await apiRequest(`/api/tasks/${id}`, 'DELETE', null, true);
                     showToast("Tarefa excluída com sucesso!");
                     loadTasks();
                 } catch (error) {
@@ -396,7 +394,7 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
     async function handleFormSubmit(event) {
         event.preventDefault();
         const id = hiddenTaskId.value;
-        const timeValue = document.getElementById('time').value;
+        const timeValue = timeInput.value;
 
         if (timeValue && !/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(timeValue)) {
             showToast("Formato de horário inválido. Use HH:mm.", true);
@@ -431,9 +429,17 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
         const method = id ? 'PUT' : 'POST';
 
         try {
-            await apiRequest(endpoint, method, taskData, true); // showLoader = true
+            await apiRequest(endpoint, method, taskData, true);
             showToast(id ? "Tarefa atualizada com sucesso!" : "Tarefa adicionada com sucesso!");
-            if (!id) playSound(addSound, 0.5);
+            
+            if (!id) {
+                playSound(addSound, 0.5);
+                const currentTotal = parseInt(localStorage.getItem('totalTasks') || '0', 10);
+                const newTotal = currentTotal + 1;
+                localStorage.setItem('totalTasks', newTotal);
+                userTotalTasksSpan.textContent = newTotal;
+            }
+
             closeModal();
             loadTasks();
         } catch (error) {
@@ -442,7 +448,43 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
     }
     taskForm.addEventListener('submit', handleFormSubmit);
 
-    // --- 6. LÓGICA DO MODAL (Tarefas) ---
+    // --- 6. LÓGICA DO MODAL E SUGESTÕES DE HORÁRIO ---
+    function populateTimeSuggestions() {
+        timeSuggestions.innerHTML = '';
+        const now = new Date();
+        let startHour = now.getHours();
+        let startMinute = now.getMinutes();
+
+        const dateValue = document.getElementById('date').value;
+        const today = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+
+        if (dateValue === today) {
+            if (startMinute < 15) startMinute = 15;
+            else if (startMinute < 30) startMinute = 30;
+            else if (startMinute < 45) startMinute = 45;
+            else {
+                startMinute = 0;
+                startHour += 1;
+            }
+        } else {
+            startHour = 0;
+            startMinute = 0;
+        }
+
+        for (let h = startHour; h < 24; h++) {
+            for (let m = (h === startHour ? startMinute : 0); m < 60; m += 15) {
+                const hourString = h.toString().padStart(2, '0');
+                const minuteString = m.toString().padStart(2, '0');
+                const timeString = `${hourString}:${minuteString}`;
+                const option = document.createElement('option');
+                option.value = timeString;
+                timeSuggestions.appendChild(option);
+            }
+        }
+    }
+
+    timeInput.addEventListener('focus', populateTimeSuggestions);
+
     function setDateInputMin() {
         const dateInput = document.getElementById('date');
         const today = new Date();
@@ -498,20 +540,20 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
     }
     
     function showLoggedOutState() {
-        mainContainer.classList.remove('hidden'); // Mostra o conteúdo mesmo deslogado
+        mainContainer.classList.remove('hidden');
         fab.classList.add('hidden');
         logoutBtn.classList.add('hidden');
         loginModal.classList.remove('hidden');
         registerModal.classList.add('hidden');
         loader.classList.add('hidden');
-        if (autoRefreshInterval) clearInterval(autoRefreshInterval); // Para o refresh ao deslogar
+        if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     }
     
     function logout() {
         authToken = null;
         localStorage.clear();
         allTasks = [];
-        renderTasks(); // Limpa a lista de tarefas da tela
+        renderTasks();
         showLoggedOutState();
     }
 
@@ -527,15 +569,13 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
             const data = await apiRequest('/api/user/login', 'POST', { username, password }, true);
             if (data && data.token) {
                 authToken = data.token;
-                // Salve apenas o que for pequeno e essencial
                 localStorage.setItem('authToken', authToken);
                 localStorage.setItem('userName', data.name);
                 localStorage.setItem('userAge', data.age);
+                localStorage.setItem('userPhoto', data.photo);
                 localStorage.setItem('totalTasks', data.totalTasks);
 
                 showLoginState();
-                
-                // Atualiza a UI com os dados da API, incluindo a foto
                 updateUserInfoUI(data); 
                 initializeApp(); 
             }
@@ -580,13 +620,10 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
         userPhotoInput.disabled = false;
     }
 
-    // --- MODIFICADO ---
     function updateUserInfoUI(userData = null) {
-        // Se dados forem passados, use-os. Senão, tente pegar do localStorage.
         const userName = userData ? userData.name : localStorage.getItem('userName') || '';
         const userAge = userData ? userData.age : localStorage.getItem('userAge') || '';
-        // A foto vem dos dados da API, não mais do localStorage
-        const userPhoto = userData ? userData.photo : null; 
+        const userPhoto = userData ? userData.photo : localStorage.getItem('userPhoto');
         const totalTasks = userData ? userData.totalTasks : localStorage.getItem('totalTasks') || '0';
 
         welcomeGreeting.textContent = userName ? `Olá, ${userName}!` : `Olá, Dev!`;
@@ -609,14 +646,11 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
         }
     }
     
-    // --- MODIFICADO ---
     function openUserInfoModal() {
-        // Recria um objeto com os dados atuais para a UI
         const currentUserData = {
             name: localStorage.getItem('userName'),
             age: localStorage.getItem('userAge'),
-            // Pega a foto que já está sendo exibida na tela
-            photo: profileIconBtn.querySelector('img') ? profileIconBtn.querySelector('img').src : null,
+            photo: localStorage.getItem('userPhoto'),
             totalTasks: localStorage.getItem('totalTasks')
         };
         updateUserInfoUI(currentUserData);
@@ -645,24 +679,24 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
             if (photoData) {
                 updateData.photo = photoData;
             } else {
-                const existingPhotoSrc = profileIconBtn.querySelector('img')?.src;
-                if (existingPhotoSrc && existingPhotoSrc.startsWith('data:image')) {
-                    updateData.photo = existingPhotoSrc;
+                const existingPhoto = localStorage.getItem('userPhoto');
+                if (existingPhoto && existingPhoto.startsWith('data:image')) {
+                    updateData.photo = existingPhoto;
                 }
             }
             
             try {
-                // A API irá retornar os dados atualizados
-                const updatedUser = await apiRequest('/api/user/profile', 'PUT', updateData, true); 
+                await apiRequest('/api/user/profile', 'PUT', updateData, true);
                 localStorage.setItem('userName', name);
                 localStorage.setItem('userAge', age);
-                // A foto será atualizada pela função updateUserInfoUI
+                if (updateData.photo) {
+                    localStorage.setItem('userPhoto', updateData.photo);
+                }
                 
-                // Recria o objeto de dados do usuário para atualizar a UI corretamente
                 const refreshedUserData = {
                     name: name,
                     age: age,
-                    photo: updateData.photo, // usa a foto que acabou de ser salva
+                    photo: updateData.photo,
                     totalTasks: localStorage.getItem('totalTasks')
                 };
 
@@ -682,7 +716,6 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
             saveAndUpdate(null);
         }
     }
-
 
     profileIconBtn.addEventListener('click', openUserInfoModal);
     closeUserModalBtn.addEventListener('click', closeUserInfoModal);
@@ -759,7 +792,7 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
         const options = {
             body: body,
             icon: '/icons/icon-192x192.png',
-            badge: '/icons/icon-192x192.png' // Ícone para a barra de status no Android
+            badge: '/icons/icon-192x192.png'
         };
 
         if ('serviceWorker' in navigator && navigator.serviceWorker.ready) {
@@ -801,7 +834,6 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
     function checkTasksAndSendNotifications() {
         const now = new Date();
         allTasks.forEach(async task => {
-            // Ignora tarefas que não precisam de notificação
             if (task.completed || !task.withNotification || !task.date || !task.time) {
                 return;
             }
@@ -814,10 +846,6 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
             let notificationToSend = null;
             let newNotificationState = task.notificationState;
 
-            // Estrutura de decisão melhorada: verifica do mais atrasado para o mais adiantado.
-            // Isso garante que a notificação mais relevante seja enviada.
-
-            // Estágio 4: Notificação de 1 hora de atraso
             if (diffMillis >= oneHourMillis && task.notificationState < 4) {
                 notificationToSend = {
                     title: `Pendente: ${task.title}`,
@@ -825,7 +853,6 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
                 };
                 newNotificationState = 4;
             } 
-            // Estágio 3: Notificação de 5 minutos de atraso
             else if (diffMillis >= fiveMinMillis && task.notificationState < 3) {
                 notificationToSend = {
                     title: `Tarefa Atrasada: ${task.title}`,
@@ -833,7 +860,6 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
                 };
                 newNotificationState = 3;
             } 
-            // Estágio 2: Notificação no horário
             else if (diffMillis >= 0 && task.notificationState < 2) {
                 notificationToSend = {
                     title: `Lembrete: ${task.title}`,
@@ -841,7 +867,6 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
                 };
                 newNotificationState = 2;
             } 
-            // Estágio 1: Notificação de 5 minutos antes
             else if (diffMillis >= -fiveMinMillis && diffMillis < 0 && task.notificationState < 1) {
                 notificationToSend = {
                     title: `Lembrete: ${task.title}`,
@@ -850,7 +875,6 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
                 newNotificationState = 1;
             }
 
-            // Se uma notificação foi determinada, ela é enviada e o estado da tarefa é atualizado.
             if (notificationToSend) {
                 showNotification(notificationToSend.title, notificationToSend.body);
                 
@@ -858,10 +882,8 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
                 task.notificationState = newNotificationState;
                 
                 try {
-                    // Envia a atualização para o servidor para persistir a mudança.
                     await apiRequest(`/api/tasks/${task.id}`, 'PUT', task);
                 } catch (error) {
-                    // Em caso de falha, reverte o estado local para tentar novamente no próximo ciclo.
                     task.notificationState = originalState;
                     console.error(`Falha ao salvar o estado da notificação para a tarefa ${task.id}`, error);
                 }
@@ -1050,11 +1072,11 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
         setTheme(savedTheme);
         const savedMuteState = localStorage.getItem('isMuted') === 'true';
         setMute(savedMuteState);
-        // A UI já foi atualizada no login, mas podemos chamar de novo por segurança
+        
         const currentUserData = {
             name: localStorage.getItem('userName'),
             age: localStorage.getItem('userAge'),
-            photo: profileIconBtn.querySelector('img')?.src,
+            photo: localStorage.getItem('userPhoto'),
             totalTasks: localStorage.getItem('totalTasks')
         };
         updateUserInfoUI(currentUserData);
@@ -1066,9 +1088,8 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
                 loadTasks(),
                 fetchLocationAndWeather()
             ]);
-            // INICIA A ATUALIZAÇÃO AUTOMÁTICA
             if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-            autoRefreshInterval = setInterval(loadTasks, 20000); // Atualiza a cada 20 segundos
+            autoRefreshInterval = setInterval(loadTasks, 20000);
         } catch (error) {
             console.error("Erro durante a inicialização:", error);
             showToast("Ocorreu um erro ao iniciar o aplicativo.", true);

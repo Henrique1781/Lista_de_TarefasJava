@@ -23,7 +23,7 @@ public class UserController {
     private UserRepository userRepository;
 
     @Autowired
-    private TaskRepository taskRepository; // Adicionado
+    private TaskRepository taskRepository;
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -43,6 +43,7 @@ public class UserController {
             return new ResponseEntity<>("Username já está em uso!", HttpStatus.BAD_REQUEST);
         }
         user.setPassword(passwordEncoder.encode(user.getPassword()));
+        user.setTotalTasksCreated(0L); // Inicia o contador
         userRepository.save(user);
         return new ResponseEntity<>(Map.of("message", "Usuário registrado com sucesso!"), HttpStatus.CREATED);
     }
@@ -62,10 +63,9 @@ public class UserController {
         final String token = jwtTokenProvider.generateToken(userDetails);
         User user = userRepository.findByUsername(username).get();
 
-        // CORREÇÃO: Buscando o total de tarefas do repositório
-        long totalTasks = taskRepository.countByUserId(user.getId());
+        // CORREÇÃO: Buscando o total de tarefas do campo do usuário, não do repositório de tarefas ativas.
+        long totalTasks = user.getTotalTasksCreated() != null ? user.getTotalTasksCreated() : 0L;
 
-        // RESPOSTA DO LOGIN ATUALIZADA com mais dados
         Map<String, Object> response = new HashMap<>();
         response.put("token", token);
         response.put("name", user.getName());
@@ -76,7 +76,6 @@ public class UserController {
         return ResponseEntity.ok(response);
     }
 
-    // NOVO ENDPOINT para atualizar o perfil do usuário
     @PutMapping("/profile")
     public ResponseEntity<?> updateUserProfile(@RequestBody Map<String, String> updates, @AuthenticationPrincipal UserDetails userDetails) {
         String username = userDetails.getUsername();
