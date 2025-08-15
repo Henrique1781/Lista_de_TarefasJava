@@ -119,37 +119,49 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- 3. FUNÇÕES DA API ---
-    async function apiRequest(endpoint, method = 'GET', body = null, showLoader = false) {
-        if (showLoader) loader.classList.remove('hidden');
-        try {
-            const url = `${API_BASE_URL}${endpoint}`;
-            const options = {
-                method,
-                headers: { 'Content-Type': 'application/json' }
-            };
-            if (authToken) {
-                options.headers['Authorization'] = `Bearer ${authToken}`;
-            }
-            if (body) options.body = JSON.stringify(body);
-            const response = await fetch(url, options);
-
-            if ((response.status === 401 || response.status === 403) && endpoint !== '/api/user/login') {
-                logout();
-                return;
-            }
-
-            if (!response.ok) {
-                const errorBody = await response.text();
-                throw new Error(errorBody || `HTTP error! status: ${response.status}`);
-            }
-            return response.status === 204 ? null : await response.json();
-        } catch (error) {
-            console.error(`Error during API request to ${url}:`, error);
-            throw error;
-        } finally {
-            if (showLoader) loader.classList.add('hidden');
+    // Copie e cole esta função inteira, substituindo a antiga `apiRequest`
+async function apiRequest(endpoint, method = 'GET', body = null, showLoader = false) {
+    if (showLoader) loader.classList.remove('hidden');
+    
+    let url; // Mova a declaração da URL para fora do try
+    try {
+        url = `${API_BASE_URL}${endpoint}`;
+        const options = {
+            method,
+            headers: { 'Content-Type': 'application/json' }
+        };
+        if (authToken) {
+            options.headers['Authorization'] = `Bearer ${authToken}`;
         }
+        if (body) options.body = JSON.stringify(body);
+        const response = await fetch(url, options);
+
+        if ((response.status === 401 || response.status === 403) && endpoint !== '/api/user/login') {
+            logout();
+            return;
+        }
+
+        // Se a resposta indicar um erro (ex: payload muito grande), capture a mensagem
+        if (!response.ok) {
+            // Tenta ler o corpo do erro, mas se não conseguir, usa o statusText
+            let errorBody;
+            try {
+                errorBody = await response.text();
+            } catch (e) {
+                errorBody = response.statusText;
+            }
+            throw new Error(errorBody || `HTTP error! status: ${response.status}`);
+        }
+        return response.status === 204 ? null : await response.json();
+    } catch (error) {
+        // Log de erro mais detalhado
+        console.error(`Error during API request to endpoint: ${endpoint}. URL: ${url}.`, error);
+        // Joga o erro para a função que chamou, para que o showToast possa exibi-lo
+        throw error;
+    } finally {
+        if (showLoader) loader.classList.add('hidden');
     }
+}
 
     // --- 4. RENDERIZAÇÃO E LÓGICA (Tarefas) ---
     function updateStats() {
