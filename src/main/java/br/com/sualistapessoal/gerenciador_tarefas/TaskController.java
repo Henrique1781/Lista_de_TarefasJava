@@ -20,17 +20,8 @@ public class TaskController {
 
     @PostMapping
     public Task createTask(@RequestBody Task task, @AuthenticationPrincipal UserDetails userDetails) {
-        User user = userRepository.findByUsername(userDetails.getUsername())
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
-
+        User user = userRepository.findByUsername(userDetails.getUsername()).orElseThrow();
         task.setUser(user);
-
-        // CORREÇÃO: Adicionado um Null check para evitar o NullPointerException
-        // com usuários que não tinham o campo 'totalTasksCreated' inicializado.
-        long currentTotal = user.getTotalTasksCreated() != null ? user.getTotalTasksCreated() : 0L;
-        user.setTotalTasksCreated(currentTotal + 1);
-        userRepository.save(user);
-
         return taskRepository.save(task);
     }
 
@@ -40,6 +31,7 @@ public class TaskController {
         return taskRepository.findByUserId(user.getId());
     }
 
+    // NOVO: READ - Buscar uma única tarefa pelo seu ID
     @GetMapping("/{id}")
     public ResponseEntity<Task> getTaskById(@PathVariable Long id) {
         return taskRepository.findById(id)
@@ -47,6 +39,7 @@ public class TaskController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    // UPDATE - Atualizado para incluir os novos campos
     @PutMapping("/{id}")
     public ResponseEntity<Task> updateTask(@PathVariable Long id, @RequestBody Task taskDetails) {
         return taskRepository.findById(id).map(task -> {
@@ -57,21 +50,23 @@ public class TaskController {
             task.setCategory(taskDetails.getCategory());
             task.setPriority(taskDetails.getPriority());
             task.setCompleted(taskDetails.isCompleted());
+            // SETANDO OS NOVOS CAMPOS
             task.setWithNotification(taskDetails.isWithNotification());
             task.setRecurring(taskDetails.isRecurring());
-            task.setNotificationState(taskDetails.getNotificationState());
+            task.setNotificationState(taskDetails.getNotificationState()); // LINHA ADICIONADA
 
             Task updatedTask = taskRepository.save(task);
             return ResponseEntity.ok(updatedTask);
         }).orElse(ResponseEntity.notFound().build());
     }
 
+    // DELETE - Excluir uma tarefa
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTask(@PathVariable Long id) {
         if (!taskRepository.existsById(id)) {
             return ResponseEntity.notFound().build();
         }
         taskRepository.deleteById(id);
-        return ResponseEntity.noContent().build();
+        return ResponseEntity.noContent().build(); // Resposta padrão para exclusão bem-sucedida
     }
 }

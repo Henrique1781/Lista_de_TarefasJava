@@ -23,7 +23,7 @@ public class UserController {
     private UserRepository userRepository;
 
     @Autowired
-    private TaskRepository taskRepository;
+    private TaskRepository taskRepository; // Adicionado
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -43,7 +43,6 @@ public class UserController {
             return new ResponseEntity<>("Username já está em uso!", HttpStatus.BAD_REQUEST);
         }
         user.setPassword(passwordEncoder.encode(user.getPassword()));
-        user.setTotalTasksCreated(0L); // Inicializa o contador para novos usuários
         userRepository.save(user);
         return new ResponseEntity<>(Map.of("message", "Usuário registrado com sucesso!"), HttpStatus.CREATED);
     }
@@ -63,37 +62,21 @@ public class UserController {
         final String token = jwtTokenProvider.generateToken(userDetails);
         User user = userRepository.findByUsername(username).get();
 
-        // ALTERAÇÃO: Usa o novo campo `totalTasksCreated`
-        // Fallback para usuários antigos que não possuem o campo
-        long totalTasksCreated = user.getTotalTasksCreated() != null ? user.getTotalTasksCreated() : taskRepository.countByUserId(user.getId());
+        // CORREÇÃO: Buscando o total de tarefas do repositório
+        long totalTasks = taskRepository.countByUserId(user.getId());
 
+        // RESPOSTA DO LOGIN ATUALIZADA com mais dados
         Map<String, Object> response = new HashMap<>();
         response.put("token", token);
         response.put("name", user.getName());
         response.put("age", user.getAge());
         response.put("photo", user.getPhoto());
-        response.put("totalTasksCreated", totalTasksCreated); // CHAVE ATUALIZADA
+        response.put("totalTasks", totalTasks);
 
         return ResponseEntity.ok(response);
     }
 
-    // NOVO ENDPOINT: Busca os dados do usuário logado para resolver o problema de refresh da página.
-    @GetMapping("/me")
-    public ResponseEntity<?> getCurrentUserProfile(@AuthenticationPrincipal UserDetails userDetails) {
-        User user = userRepository.findByUsername(userDetails.getUsername())
-                .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
-
-        long totalTasksCreated = user.getTotalTasksCreated() != null ? user.getTotalTasksCreated() : taskRepository.countByUserId(user.getId());
-
-        Map<String, Object> response = new HashMap<>();
-        response.put("name", user.getName());
-        response.put("age", user.getAge());
-        response.put("photo", user.getPhoto());
-        response.put("totalTasksCreated", totalTasksCreated);
-
-        return ResponseEntity.ok(response);
-    }
-
+    // NOVO ENDPOINT para atualizar o perfil do usuário
     @PutMapping("/profile")
     public ResponseEntity<?> updateUserProfile(@RequestBody Map<String, String> updates, @AuthenticationPrincipal UserDetails userDetails) {
         String username = userDetails.getUsername();
