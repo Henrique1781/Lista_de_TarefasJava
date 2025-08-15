@@ -1,4 +1,4 @@
-const CACHE_NAME = 'minha-rotina-cache-v1';
+const CACHE_NAME = 'minha-rotina-cache-v2'; // Versão do cache alterada para forçar a atualização
 const urlsToCache = [
   '/',
   '/index.html',
@@ -11,70 +11,65 @@ const urlsToCache = [
   'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap'
 ];
 
-// Evento de Instalação: Salva os ficheiros essenciais em cache
+// Evento de Instalação: O Service Worker é instalado
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('Cache aberto');
+        console.log('Service Worker: Cache aberto e ficheiros adicionados.');
         return cache.addAll(urlsToCache);
       })
+      .then(() => self.skipWaiting()) // Força o novo Service Worker a ativar-se imediatamente
   );
 });
 
-// Evento de Fetch: Interceta os pedidos para funcionar offline
+// Evento de Ativação: O Service Worker começa a controlar a página
+self.addEventListener('activate', event => {
+  event.waitUntil(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
+        cacheNames.map(cacheName => {
+          // Apaga caches antigos que não correspondem ao CACHE_NAME atual
+          if (cacheName !== CACHE_NAME) {
+            console.log('Service Worker: A limpar cache antigo:', cacheName);
+            return caches.delete(cacheName);
+          }
+        })
+      );
+    }).then(() => self.clients.claim()) // Torna-se o controlador de todas as abas abertas
+  );
+});
+
+// Evento de Fetch: Interceta pedidos de rede para funcionamento offline
 self.addEventListener('fetch', event => {
   event.respondWith(
     caches.match(event.request)
       .then(response => {
-        // Se o recurso estiver no cache, retorna-o.
-        if (response) {
-          return response;
-        }
-        // Caso contrário, busca na rede.
-        return fetch(event.request);
-      }
-    )
+        return response || fetch(event.request);
+      })
   );
 });
 
-// --- CÓDIGO NOVO E ESSENCIAL ADICIONADO ---
-// Evento de Push: Ouve as notificações push recebidas do servidor
+// Evento de Push: Essencial para notificações em segundo plano (atualmente não utilizado, mas pronto para o futuro)
 self.addEventListener('push', event => {
-  // Extrai os dados da notificação. Por defeito, usamos um texto padrão se não vier nada.
-  const data = event.data ? event.data.json() : { title: 'Minha Rotina', body: 'Não se esqueça das suas tarefas!' };
-
+  const data = event.data ? event.data.json() : {};
   const title = data.title || 'Minha Rotina';
   const options = {
-    body: data.body || 'Você tem uma nova notificação.',
-    icon: '/icons/icon-192x192.png', // Ícone que aparece na notificação
-    badge: '/icons/icon-192x192.png' // Ícone para a barra de status no Android
+    body: data.body || 'Você tem uma nova tarefa ou lembrete.',
+    icon: '/icons/icon-192x192.png',
+    badge: '/icons/icon-192x192.png'
   };
-
-  // Pede ao navegador para mostrar a notificação com o título e as opções definidas
   event.waitUntil(self.registration.showNotification(title, options));
 });
 
-
-// Evento de Clique na Notificação
+// Evento de Clique na Notificação: Define o que acontece quando o utilizador clica na notificação
 self.addEventListener('notificationclick', event => {
-  // Fecha a notificação
   event.notification.close();
-
-  // Abre a janela da aplicação ou foca nela se já estiver aberta
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
-      // Se uma janela da app já estiver aberta, foca nela
       if (clientList.length > 0) {
-        let client = clientList[0];
-        for (let i = 0; i < clientList.length; i++) {
-          if (clientList[i].focused) {
-            client = clientList[i];
-          }
-        }
-        return client.focus();
+        return clientList[0].focus();
       }
-      // Se não houver uma janela aberta, abre uma nova
       return clients.openWindow('/');
     })
   );
