@@ -47,8 +47,9 @@ public class SecurityConfig {
                         .requestMatchers("/", "/index.html", "/style.css", "/script.js", "/manifest.json", "/sw.js").permitAll()
                         .requestMatchers("/icons/**", "/sounds/**").permitAll()
                         .requestMatchers("/api/user/login", "/api/user/register").permitAll()
-                        // Adicionada permissão para os endpoints de notificação
-                        .requestMatchers("/api/notifications/subscribe", "/api/notifications/vapidPublicKey").permitAll()
+                        // CORREÇÃO: Apenas a chave pública VAPID precisa ser permitida publicamente.
+                        // O endpoint '/subscribe' agora exigirá autenticação, que é o correto.
+                        .requestMatchers("/api/notifications/vapidPublicKey").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtTokenFilter, UsernamePasswordAuthenticationFilter.class);
