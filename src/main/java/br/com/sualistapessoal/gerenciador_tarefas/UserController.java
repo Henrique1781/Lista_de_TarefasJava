@@ -6,11 +6,13 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -19,6 +21,9 @@ public class UserController {
 
     @Autowired
     private UserRepository userRepository;
+
+    @Autowired
+    private TaskRepository taskRepository; // Adicionado
 
     @Autowired
     private PasswordEncoder passwordEncoder;
@@ -57,6 +62,35 @@ public class UserController {
         final String token = jwtTokenProvider.generateToken(userDetails);
         User user = userRepository.findByUsername(username).get();
 
-        return ResponseEntity.ok(Map.of("token", token, "name", user.getName()));
+        // CORREÇÃO: Buscando o total de tarefas do repositório
+        long totalTasks = taskRepository.countByUserId(user.getId());
+
+        // RESPOSTA DO LOGIN ATUALIZADA com mais dados
+        Map<String, Object> response = new HashMap<>();
+        response.put("token", token);
+        response.put("name", user.getName());
+        response.put("age", user.getAge());
+        response.put("photo", user.getPhoto());
+        response.put("totalTasks", totalTasks);
+
+        return ResponseEntity.ok(response);
+    }
+
+    // NOVO ENDPOINT para atualizar o perfil do usuário
+    @PutMapping("/profile")
+    public ResponseEntity<?> updateUserProfile(@RequestBody Map<String, String> updates, @AuthenticationPrincipal UserDetails userDetails) {
+        String username = userDetails.getUsername();
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("Usuário não encontrado"));
+
+        user.setName(updates.get("name"));
+        user.setAge(Integer.parseInt(updates.get("age")));
+        if (updates.containsKey("photo")) {
+            user.setPhoto(updates.get("photo"));
+        }
+
+        userRepository.save(user);
+
+        return ResponseEntity.ok(Map.of("message", "Perfil atualizado com sucesso!"));
     }
 }

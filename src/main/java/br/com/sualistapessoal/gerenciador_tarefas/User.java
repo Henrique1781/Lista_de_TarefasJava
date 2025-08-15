@@ -12,7 +12,7 @@ public class User {
     private Long id;
 
     @Column(nullable = false)
-    private String name; // NOVO CAMPO
+    private String name;
 
     @Column(unique = true, nullable = false)
     private String username;
@@ -21,57 +21,28 @@ public class User {
     private String password;
 
     @Column
-    private Integer age; // NOVO CAMPO
+    private Integer age;
+
+    @Lob // Anotação para campos grandes
+    @Column(columnDefinition = "TEXT") // Define o tipo da coluna como TEXT para strings longas
+    private String photo; // NOVO CAMPO PARA A FOTO
 
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<Task> tasks;
 
-    // Getters e Setters
-    public Long getId() {
-        return id;
-    }
-
-    public void setId(Long id) {
-        this.id = id;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = password;
-    }
-
-    public Integer getAge() {
-        return age;
-    }
-
-    public void setAge(Integer age) {
-        this.age = age;
-    }
-
-    public List<Task> getTasks() {
-        return tasks;
-    }
-
-    public void setTasks(List<Task> tasks) {
-        this.tasks = tasks;
-    }
+    // Getters e Setters (incluindo o da foto)
+    public Long getId() { return id; }
+    public void setId(Long id) { this.id = id; }
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getUsername() { return username; }
+    public void setUsername(String username) { this.username = username; }
+    public String getPassword() { return password; }
+    public void setPassword(String password) { this.password = password; }
+    public Integer getAge() { return age; }
+    public void setAge(Integer age) { this.age = age; }
+    public String getPhoto() { return photo; } // GETTER DA FOTO
+    public void setPhoto(String photo) { this.photo = photo; } // SETTER DA FOTO
+    public List<Task> getTasks() { return tasks; }
+    public void setTasks(List<Task> tasks) { this.tasks = tasks; }
 }
