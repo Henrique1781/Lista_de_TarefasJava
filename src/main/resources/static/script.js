@@ -801,36 +801,68 @@ async function apiRequest(endpoint, method = 'GET', body = null, showLoader = fa
     function checkTasksAndSendNotifications() {
         const now = new Date();
         allTasks.forEach(async task => {
-            if (task.completed || !task.withNotification || !task.date || !task.time) return;
-    
+            // Ignora tarefas que não precisam de notificação
+            if (task.completed || !task.withNotification || !task.date || !task.time) {
+                return;
+            }
+
             const taskDateTime = new Date(`${task.date}T${task.time}`);
             const diffMillis = now - taskDateTime;
             const fiveMinMillis = 5 * 60 * 1000;
             const oneHourMillis = 60 * 60 * 1000;
-            let needsUpdate = false;
-    
-            if (diffMillis >= -fiveMinMillis && diffMillis < 0 && task.notificationState < 1) {
-                showNotification(`Lembrete: ${task.title}`, `Sua tarefa começa em 5 minutos.`);
-                task.notificationState = 1;
-                needsUpdate = true;
-            } else if (diffMillis >= 0 && diffMillis < fiveMinMillis && task.notificationState < 2) {
-                showNotification(`Lembrete: ${task.title}`, `Sua tarefa está agendada para agora. Não se esqueça!`);
-                task.notificationState = 2;
-                needsUpdate = true;
-            } else if (diffMillis >= fiveMinMillis && diffMillis < oneHourMillis && task.notificationState < 3) {
-                showNotification(`Tarefa Atrasada: ${task.title}`, `Já se passaram 5 minutos. Se já concluiu, marque a tarefa como feita.`);
-                task.notificationState = 3;
-                needsUpdate = true;
-            } else if (diffMillis >= oneHourMillis && task.notificationState < 4) {
-                showNotification(`Pendente: ${task.title}`, `Esta tarefa está pendente e atrasada há mais de uma hora.`);
-                task.notificationState = 4;
-                needsUpdate = true;
+            
+            let notificationToSend = null;
+            let newNotificationState = task.notificationState;
+
+            // Estrutura de decisão melhorada: verifica do mais atrasado para o mais adiantado.
+            // Isso garante que a notificação mais relevante seja enviada.
+
+            // Estágio 4: Notificação de 1 hora de atraso
+            if (diffMillis >= oneHourMillis && task.notificationState < 4) {
+                notificationToSend = {
+                    title: `Pendente: ${task.title}`,
+                    body: `Esta tarefa está pendente e atrasada há mais de uma hora.`
+                };
+                newNotificationState = 4;
+            } 
+            // Estágio 3: Notificação de 5 minutos de atraso
+            else if (diffMillis >= fiveMinMillis && task.notificationState < 3) {
+                notificationToSend = {
+                    title: `Tarefa Atrasada: ${task.title}`,
+                    body: `Já se passaram 5 minutos. Se já concluiu, marque a tarefa como feita.`
+                };
+                newNotificationState = 3;
+            } 
+            // Estágio 2: Notificação no horário
+            else if (diffMillis >= 0 && task.notificationState < 2) {
+                notificationToSend = {
+                    title: `Lembrete: ${task.title}`,
+                    body: `Sua tarefa está agendada para agora. Não se esqueça!`
+                };
+                newNotificationState = 2;
+            } 
+            // Estágio 1: Notificação de 5 minutos antes
+            else if (diffMillis >= -fiveMinMillis && diffMillis < 0 && task.notificationState < 1) {
+                notificationToSend = {
+                    title: `Lembrete: ${task.title}`,
+                    body: `Sua tarefa começa em 5 minutos.`
+                };
+                newNotificationState = 1;
             }
 
-            if (needsUpdate) {
+            // Se uma notificação foi determinada, ela é enviada e o estado da tarefa é atualizado.
+            if (notificationToSend) {
+                showNotification(notificationToSend.title, notificationToSend.body);
+                
+                const originalState = task.notificationState;
+                task.notificationState = newNotificationState;
+                
                 try {
+                    // Envia a atualização para o servidor para persistir a mudança.
                     await apiRequest(`/api/tasks/${task.id}`, 'PUT', task);
                 } catch (error) {
+                    // Em caso de falha, reverte o estado local para tentar novamente no próximo ciclo.
+                    task.notificationState = originalState;
                     console.error(`Falha ao salvar o estado da notificação para a tarefa ${task.id}`, error);
                 }
             }
