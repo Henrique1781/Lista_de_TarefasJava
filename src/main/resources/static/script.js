@@ -515,14 +515,17 @@ document.addEventListener('DOMContentLoaded', () => {
             const data = await apiRequest('/api/user/login', 'POST', { username, password }, true);
             if (data && data.token) {
                 authToken = data.token;
+                // Salve apenas o que for pequeno e essencial
                 localStorage.setItem('authToken', authToken);
                 localStorage.setItem('userName', data.name);
                 localStorage.setItem('userAge', data.age);
-                localStorage.setItem('userPhoto', data.photo);
                 localStorage.setItem('totalTasks', data.totalTasks);
 
                 showLoginState();
-                initializeApp();
+                
+                // Atualiza a UI com os dados da API, incluindo a foto
+                updateUserInfoUI(data); 
+                initializeApp(); 
             }
         } catch (error) {
             showToast(error.message || "Erro ao fazer login.", true);
@@ -565,11 +568,14 @@ document.addEventListener('DOMContentLoaded', () => {
         userPhotoInput.disabled = false;
     }
 
-    function updateUserInfoUI() {
-        const userName = localStorage.getItem('userName') || '';
-        const userAge = localStorage.getItem('userAge') || '';
-        const userPhoto = localStorage.getItem('userPhoto');
-        const totalTasks = localStorage.getItem('totalTasks') || '0';
+    // --- MODIFICADO ---
+    function updateUserInfoUI(userData = null) {
+        // Se dados forem passados, use-os. Senão, tente pegar do localStorage.
+        const userName = userData ? userData.name : localStorage.getItem('userName') || '';
+        const userAge = userData ? userData.age : localStorage.getItem('userAge') || '';
+        // A foto vem dos dados da API, não mais do localStorage
+        const userPhoto = userData ? userData.photo : null; 
+        const totalTasks = userData ? userData.totalTasks : localStorage.getItem('totalTasks') || '0';
 
         welcomeGreeting.textContent = userName ? `Olá, ${userName}!` : `Olá, Dev!`;
         userNameDisplay.textContent = userName || 'Não informado';
@@ -590,9 +596,18 @@ document.addEventListener('DOMContentLoaded', () => {
             profileIconBtn.innerHTML = `<i class="ph-fill ph-user"></i>`;
         }
     }
-
+    
+    // --- MODIFICADO ---
     function openUserInfoModal() {
-        updateUserInfoUI();
+        // Recria um objeto com os dados atuais para a UI
+        const currentUserData = {
+            name: localStorage.getItem('userName'),
+            age: localStorage.getItem('userAge'),
+            // Pega a foto que já está sendo exibida na tela
+            photo: profileIconBtn.querySelector('img') ? profileIconBtn.querySelector('img').src : null,
+            totalTasks: localStorage.getItem('totalTasks')
+        };
+        updateUserInfoUI(currentUserData);
         setUserInfoViewMode();
         userInfoModal.classList.remove('hidden');
     }
@@ -615,25 +630,31 @@ document.addEventListener('DOMContentLoaded', () => {
         const updateData = { name, age };
 
         const saveAndUpdate = async (photoData) => {
-            // Inclui a foto apenas se ela for nova (não nula)
             if (photoData) {
                 updateData.photo = photoData;
             } else {
-                // Se não houver foto nova, envia a existente para não apagar
-                const existingPhoto = localStorage.getItem('userPhoto');
-                if (existingPhoto && existingPhoto !== 'null') {
-                    updateData.photo = existingPhoto;
+                const existingPhotoSrc = profileIconBtn.querySelector('img')?.src;
+                if (existingPhotoSrc && existingPhotoSrc.startsWith('data:image')) {
+                    updateData.photo = existingPhotoSrc;
                 }
             }
             
             try {
-                await apiRequest('/api/user/profile', 'PUT', updateData, true); // showLoader = true
+                // A API irá retornar os dados atualizados
+                const updatedUser = await apiRequest('/api/user/profile', 'PUT', updateData, true); 
                 localStorage.setItem('userName', name);
                 localStorage.setItem('userAge', age);
-                if (photoData) {
-                    localStorage.setItem('userPhoto', photoData);
-                }
-                updateUserInfoUI();
+                // A foto será atualizada pela função updateUserInfoUI
+                
+                // Recria o objeto de dados do usuário para atualizar a UI corretamente
+                const refreshedUserData = {
+                    name: name,
+                    age: age,
+                    photo: updateData.photo, // usa a foto que acabou de ser salva
+                    totalTasks: localStorage.getItem('totalTasks')
+                };
+
+                updateUserInfoUI(refreshedUserData);
                 showToast("Informações salvas com sucesso!");
                 closeUserInfoModal();
             } catch (error) {
@@ -649,6 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
             saveAndUpdate(null);
         }
     }
+
 
     profileIconBtn.addEventListener('click', openUserInfoModal);
     closeUserModalBtn.addEventListener('click', closeUserInfoModal);
@@ -984,7 +1006,14 @@ document.addEventListener('DOMContentLoaded', () => {
         setTheme(savedTheme);
         const savedMuteState = localStorage.getItem('isMuted') === 'true';
         setMute(savedMuteState);
-        updateUserInfoUI();
+        // A UI já foi atualizada no login, mas podemos chamar de novo por segurança
+        const currentUserData = {
+            name: localStorage.getItem('userName'),
+            age: localStorage.getItem('userAge'),
+            photo: profileIconBtn.querySelector('img')?.src,
+            totalTasks: localStorage.getItem('totalTasks')
+        };
+        updateUserInfoUI(currentUserData);
         requestNotificationPermission();
         createCategoryFilters();
 
