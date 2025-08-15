@@ -454,25 +454,28 @@ document.addEventListener('DOMContentLoaded', () => {
         const now = new Date();
         let startHour = now.getHours();
         let startMinute = now.getMinutes();
-
+    
         const dateValue = document.getElementById('date').value;
         const today = new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().split('T')[0];
-
+    
+        // Se a data selecionada for hoje, ajuste a hora de início
         if (dateValue === today) {
-            if (startMinute < 15) startMinute = 15;
-            else if (startMinute < 30) startMinute = 30;
-            else if (startMinute < 45) startMinute = 45;
-            else {
+            // Arredonda para a próxima meia hora
+            if (startMinute < 30) {
+                startMinute = 30;
+            } else {
                 startMinute = 0;
                 startHour += 1;
             }
         } else {
+            // Para datas futuras, começa do início do dia
             startHour = 0;
             startMinute = 0;
         }
-
+    
+        // Gera as opções de 30 em 30 minutos
         for (let h = startHour; h < 24; h++) {
-            for (let m = (h === startHour ? startMinute : 0); m < 60; m += 15) {
+            for (let m = (h === startHour ? startMinute : 0); m < 60; m += 30) {
                 const hourString = h.toString().padStart(2, '0');
                 const minuteString = m.toString().padStart(2, '0');
                 const timeString = `${hourString}:${minuteString}`;
@@ -711,7 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (photoFile) {
             const reader = new FileReader();
             reader.onload = (e) => saveAndUpdate(e.target.result);
-            reader.readAsDataURL(photoFile);
+            reader.readAsDataURL(file);
         } else {
             saveAndUpdate(null);
         }
